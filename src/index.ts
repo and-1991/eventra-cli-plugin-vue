@@ -21,13 +21,7 @@ export function createCliPluginVue(): CliPluginVue {
 export default createCliPluginVue();
 
 export { transformVueSfc } from "./transform";
-export {
-  buildScriptModule,
-  buildTemplateModule,
-  parseVueSfc,
-  scriptVirtualPath,
-  templateVirtualPath,
-} from "./parse-vue-sfc";
+export { buildScriptModule, parseVueSfc, scriptVirtualPath } from "./parse-vue-sfc";
 export type {
   CliPluginStaticCalleeSink,
   CliPluginTransformInput,
@@ -35,4 +29,4 @@ export type {
   CliPluginVirtualModule,
   CliPluginVue,
 } from "./types";
-export type { ParsedVueSfc, VueScriptBlock } from "./parse-vue-sfc";
+export type { ParsedVueSfc, TemplateEventBinding, VueScriptBlock } from "./parse-vue-sfc";
