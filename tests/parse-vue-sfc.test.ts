@@ -112,6 +112,37 @@ describe("parseVueSfc", () => {
     expect(parsed.scripts[0]?.content).toContain("defineProps<{ eventName: string }>()");
   });
 
+  it("passes all script setup macros through untouched and still detects the sink call", () => {
+    const source = `
+      <script setup lang="ts">
+      import { Eventra } from "@eventra_dev/eventra-sdk";
+
+      defineOptions({ inheritAttrs: false });
+      const props = withDefaults(defineProps<{ eventName?: string }>(), { eventName: "all_macros_event" });
+      const emit = defineEmits<{ tracked: [name: string] }>();
+      defineExpose({ props });
+
+      const tracker = new Eventra({ apiKey: "k" });
+      tracker.track(props.eventName);
+      emit("tracked", props.eventName);
+      </script>
+      <template>
+        <Button event="all_macros_template_event" />
+      </template>
+    `;
+    const parsed = parseVueSfc(source, "/virtual/AllMacros.vue");
+
+    const script = parsed.scripts[0]?.content ?? "";
+    expect(script).toContain("defineOptions({ inheritAttrs: false });");
+    expect(script).toContain("withDefaults(defineProps<{ eventName?: string }>()");
+    expect(script).toContain("defineEmits<{ tracked: [name: string] }>();");
+    expect(script).toContain("defineExpose({ props });");
+    expect(script).toContain("tracker.track(props.eventName);");
+    expect(parsed.templateEvents).toEqual([
+      { kind: "literal", value: "all_macros_template_event" },
+    ]);
+  });
+
   it("resolves script src= and template src= external file references", () => {
     const fixture = path.join(
       path.dirname(fileURLToPath(import.meta.url)),
