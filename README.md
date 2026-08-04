@@ -8,6 +8,7 @@
   <a href="https://www.npmjs.com/package/@eventra_dev/cli-plugin-vue"><img alt="npm version" src="https://img.shields.io/npm/v/@eventra_dev/cli-plugin-vue.svg?style=flat-square&color=blue"></a>
   <a href="https://www.npmjs.com/package/@eventra_dev/cli-plugin-vue"><img alt="npm downloads" src="https://img.shields.io/npm/dm/@eventra_dev/cli-plugin-vue.svg?style=flat-square&color=blue"></a>
   <img alt="tests passing" src="https://img.shields.io/badge/tests-16%20passing-brightgreen?style=flat-square&logo=vitest&logoColor=white">
+  <img alt="coverage" src="https://img.shields.io/badge/coverage-95%25-brightgreen?style=flat-square&logo=vitest&logoColor=white">
   <img alt="node" src="https://img.shields.io/node/v/@eventra_dev/cli-plugin-vue?style=flat-square&color=darkgreen&logo=node.js&logoColor=white">
   <a href="https://www.typescriptlang.org/"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-ready-blue?style=flat-square&logo=typescript&logoColor=white"></a>
   <img alt="license" src="https://img.shields.io/npm/l/@eventra_dev/cli-plugin-vue?style=flat-square&color=lightgrey">
@@ -133,6 +134,8 @@ No dependency on `@eventra_dev/eventra-cli` — the CLI adapts this shape intern
 
 ## Test Coverage
 
+**95% statement coverage** (79.2% branch, 100% function, 96.6% line — v8 provider, `pnpm test:coverage`).
+
 **16 unit tests** (vitest), covering:
 
 | Area | Covers |
@@ -150,6 +153,7 @@ Run locally:
 
 ```bash
 pnpm --filter @eventra_dev/cli-plugin-vue test
+pnpm --filter @eventra_dev/cli-plugin-vue test:coverage
 ```
 
 ---
