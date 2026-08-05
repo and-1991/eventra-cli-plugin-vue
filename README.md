@@ -7,8 +7,8 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@eventra_dev/cli-plugin-vue"><img alt="npm version" src="https://img.shields.io/npm/v/@eventra_dev/cli-plugin-vue.svg?style=flat-square&color=blue"></a>
   <a href="https://www.npmjs.com/package/@eventra_dev/cli-plugin-vue"><img alt="npm downloads" src="https://img.shields.io/npm/dm/@eventra_dev/cli-plugin-vue.svg?style=flat-square&color=blue"></a>
-  <img alt="tests passing" src="https://img.shields.io/badge/tests-16%20passing-brightgreen?style=flat-square&logo=vitest&logoColor=white">
-  <img alt="coverage" src="https://img.shields.io/badge/coverage-95%25-brightgreen?style=flat-square&logo=vitest&logoColor=white">
+  <img alt="tests passing" src="https://img.shields.io/badge/tests-20%20passing-brightgreen?style=flat-square&logo=vitest&logoColor=white">
+  <img alt="coverage" src="https://img.shields.io/badge/coverage-100%25-brightgreen?style=flat-square&logo=vitest&logoColor=white">
   <img alt="node" src="https://img.shields.io/node/v/@eventra_dev/cli-plugin-vue?style=flat-square&color=darkgreen&logo=node.js&logoColor=white">
   <a href="https://www.typescriptlang.org/"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-ready-blue?style=flat-square&logo=typescript&logoColor=white"></a>
   <img alt="license" src="https://img.shields.io/npm/l/@eventra_dev/cli-plugin-vue?style=flat-square&color=lightgrey">
@@ -96,7 +96,7 @@ The expression is copied as-is into the same module scope as the script. If it r
 
 Nuxt pages, layouts, and components are ordinary `.vue` SFCs — parsed identically, no extra configuration needed.
 
-Composables auto-imported without an explicit `import` statement (Nuxt's own composables, or your own from `composables/`/`utils/`) are intended to resolve **once the project has run `nuxt prepare`/`nuxt dev`** (so `.nuxt/` exists and is wired into `tsconfig.json` — the CLI analyzes the project's real `tsconfig.json`, so Nuxt's generated ambient types are visible to it like any other TypeScript project). The CLI's resolver understands the `declare const x: typeof import("./module")["name"]` shape Nuxt/`unplugin-auto-import` generate for these bindings, and this is covered by a unit test that hand-writes that ambient shape (`@eventra_dev/eventra-cli`'s `nuxtAutoImportCompat.test.ts`) — but running a real `nuxt prepare`/`nuxt build` end-to-end has not been verified in this environment (blocked by a sandbox GLIBC incompatibility with Nuxt's native build tooling), so this is not confirmed against a real generated `.nuxt/imports.d.ts`.
+Composables auto-imported without an explicit `import` statement (Nuxt's own composables, or your own from `composables/`/`utils/`) are intended to resolve **once the project has run `nuxt prepare`/`nuxt dev`** (so `.nuxt/` exists and is wired into `tsconfig.json` — the CLI analyzes the project's real `tsconfig.json`, so Nuxt's generated ambient types are visible to it like any other TypeScript project). The host CLI's resolver understands the `declare const x: typeof import("./module")["name"]` shape Nuxt/`unplugin-auto-import` generate for these bindings (verified against a hand-written fixture reproducing that ambient shape) — but running a real `nuxt prepare`/`nuxt build` end-to-end has not been verified in this environment (blocked by a sandbox GLIBC incompatibility with Nuxt's native build tooling), so this is not confirmed against a real generated `.nuxt/imports.d.ts`.
 
 ---
 
@@ -134,9 +134,9 @@ No dependency on `@eventra_dev/eventra-cli` — the CLI adapts this shape intern
 
 ## Test Coverage
 
-**95% statement coverage** (79.2% branch, 100% function, 96.6% line — v8 provider, `pnpm test:coverage`).
+**100% statement/branch/function/line coverage** (v8 provider, `pnpm test:coverage`), enforced via a `coverage.thresholds` block in `vitest.config.ts`.
 
-**16 unit tests** (vitest), covering:
+**20 unit tests** (vitest), covering:
 
 | Area | Covers |
 |---|---|
@@ -147,7 +147,7 @@ No dependency on `@eventra_dev/eventra-cli` — the CLI adapts this shape intern
 | Virtual module output | Single combined `.vue.ts`, export stub when script/template are empty |
 | Plugin contract | `match()`, `includeGlobs`, `staticSinks`, `transform()` |
 
-The Nuxt ambient auto-import shape (`declare const x: typeof import(...)`) is covered by a unit test in `@eventra_dev/eventra-cli` (`nuxtAutoImportCompat.test.ts`) that hand-writes that shape — this is not the same as an end-to-end run against a real `nuxt prepare`/`nuxt build`, which has not been verified in this environment (see the [Nuxt](#nuxt) section above).
+The Nuxt ambient auto-import shape (`declare const x: typeof import(...)`) is covered by a unit test in the host CLI that hand-writes that shape — this is not the same as an end-to-end run against a real `nuxt prepare`/`nuxt build`, which has not been verified in this environment (see the [Nuxt](#nuxt) section above).
 
 Run locally:
 

@@ -67,6 +67,24 @@ describe("parseVueSfc", () => {
     ]);
   });
 
+  it("drops an empty event=\"\" attribute instead of emitting a blank literal", () => {
+    const parsed = parseVueSfc(
+      '<template><Button event="" /></template>',
+      "/EmptyLiteral.vue",
+    );
+
+    expect(parsed.templateEvents).toHaveLength(0);
+  });
+
+  it("drops an empty :event=\"\" binding instead of emitting a blank dynamic expression", () => {
+    const parsed = parseVueSfc(
+      '<template><Button :event="" /></template>',
+      "/EmptyDynamic.vue",
+    );
+
+    expect(parsed.templateEvents).toHaveLength(0);
+  });
+
   it("captures dynamic :event bindings as raw expressions instead of dropping them", () => {
     const source = `
       <template>
@@ -160,6 +178,22 @@ describe("parseVueSfc", () => {
     ]);
   });
 
+  it("skips a script/template src= pointing at a file that doesn't exist", () => {
+    const parsed = parseVueSfc(
+      '<script src="./does-not-exist.ts" lang="ts"></script>' +
+        '<template src="./does-not-exist.html"></template>',
+      path.join(
+        path.dirname(fileURLToPath(import.meta.url)),
+        "fixtures",
+        "src-blocks",
+        "main.vue",
+      ),
+    );
+
+    expect(parsed.scripts).toHaveLength(0);
+    expect(parsed.templateEvents).toHaveLength(0);
+  });
+
   it("returns no scripts and no template events for an empty SFC", () => {
     const parsed = parseVueSfc("<template><div /></template>", "/Empty.vue");
 
@@ -200,6 +234,17 @@ describe("buildScriptModule", () => {
 
     expect(module).toContain('const eventName = "from_setup_const"');
     expect(module).toContain("__eventra_vue_template_event__(eventName);");
+  });
+
+  it("adds a @ts-nocheck header for a plain JS script block (no lang=\"ts\")", () => {
+    const parsed = parseVueSfc(
+      '<script>track("plain_js_event");</script>',
+      "/PlainJs.vue",
+    );
+    const module = buildScriptModule(parsed);
+
+    expect(module).toContain("// @ts-nocheck");
+    expect(module).toContain('track("plain_js_event")');
   });
 
   it("returns an export stub when there is no script and no template events", () => {

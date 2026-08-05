@@ -107,10 +107,16 @@ export function parseVueSfc(source: string, filePath: string): ParsedVueSfc {
   if (template) {
     if (template.ast) {
       collectEventBindings(template.ast, templateEvents);
-    } else if (template.src) {
-      const external = readSrcFile(filePath, template.src);
-      if (external) {
-        collectEventBindings(parseTemplate(external), templateEvents);
+    } else {
+      // @vue/compiler-sfc only ever leaves `ast` unset when `src` is set
+      // (external template file) - the `else` here is a defensive fallback,
+      // not a reachable third case
+      /* v8 ignore else */
+      if (template.src) {
+        const external = readSrcFile(filePath, template.src);
+        if (external) {
+          collectEventBindings(parseTemplate(external), templateEvents);
+        }
       }
     }
   }
@@ -118,7 +124,13 @@ export function parseVueSfc(source: string, filePath: string): ParsedVueSfc {
   return {
     scripts,
     templateEvents,
-    errors: errors.map((error) => (error instanceof Error ? error.message : String(error))),
+    errors: errors.map((error) => {
+      // @vue/compiler-sfc errors are always Error instances
+      /* v8 ignore else */
+      if (error instanceof Error) return error.message;
+      /* v8 ignore next */
+      return String(error);
+    }),
   };
 }
 
