@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+import pkg from "../package.json";
 import { createCliPluginVue } from "../src/index";
 import { buildScriptModule, parseVueSfc, scriptVirtualPath } from "../src/parse-vue-sfc";
 
@@ -263,6 +264,7 @@ describe("createCliPluginVue", () => {
     expect(plugin.match("App.vue")).toBe(true);
     expect(plugin.match("App.ts")).toBe(false);
     expect(plugin.includeGlobs).toContain("**/*.vue");
+    expect(plugin.version).toBe(pkg.version);
     expect(plugin.staticSinks?.[0]?.callee).toBe("__eventra_vue_template_event__");
 
     const result = await plugin.transform({ path: "/project/Checkout.vue", source });

@@ -1,10 +1,11 @@
+import pkg from "../package.json";
 import { transformVueSfc } from "./transform";
 import type { CliPluginVue } from "./types";
 
 export function createCliPluginVue(): CliPluginVue {
   return {
     id: "vue",
-    version: "0.1.0",
+    version: pkg.version,
     includeGlobs: ["**/*.vue"],
     staticSinks: [
       {
