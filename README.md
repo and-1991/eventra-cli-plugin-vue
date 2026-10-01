@@ -96,7 +96,7 @@ The expression is copied as-is into the same module scope as the script. If it r
 
 Nuxt pages, layouts, and components are ordinary `.vue` SFCs — parsed identically, no extra configuration needed.
 
-Composables auto-imported without an explicit `import` statement (Nuxt's own composables, or your own from `composables/`/`utils/`) are intended to resolve **once the project has run `nuxt prepare`/`nuxt dev`** (so `.nuxt/` exists and is wired into `tsconfig.json` — the CLI analyzes the project's real `tsconfig.json`, so Nuxt's generated ambient types are visible to it like any other TypeScript project). The host CLI's resolver understands the `declare const x: typeof import("./module")["name"]` shape Nuxt/`unplugin-auto-import` generate for these bindings (verified against a hand-written fixture reproducing that ambient shape) — but running a real `nuxt prepare`/`nuxt build` end-to-end has not been verified in this environment (blocked by a sandbox GLIBC incompatibility with Nuxt's native build tooling), so this is not confirmed against a real generated `.nuxt/imports.d.ts`.
+Composables auto-imported without an explicit `import` statement (Nuxt's own composables, or your own from `composables/`/`utils/`) are intended to resolve **once the project has run `nuxt prepare`/`nuxt dev`** (so `.nuxt/` exists and is wired into `tsconfig.json` - the CLI analyzes the project's real `tsconfig.json`, so Nuxt's generated ambient types are visible to it like any other TypeScript project). The host CLI's resolver understands the `declare const x: typeof import("./module")["name"]` shape Nuxt/`unplugin-auto-import` generate for these bindings (covered by a unit test with a hand-written fixture of that ambient shape, and verified manually end to end on a real Nuxt 3 project: after `nuxt prepare`, calls to an auto-imported composable that wraps `track()` were detected with no explicit `import`; without `.nuxt/` the same project yields no events). The end-to-end check is manual, not part of the automated test suite.
 
 ---
 
@@ -147,7 +147,7 @@ No dependency on `@eventra_dev/eventra-cli` — the CLI adapts this shape intern
 | Virtual module output | Single combined `.vue.ts`, export stub when script/template are empty |
 | Plugin contract | `match()`, `includeGlobs`, `staticSinks`, `transform()` |
 
-The Nuxt ambient auto-import shape (`declare const x: typeof import(...)`) is covered by a unit test in the host CLI that hand-writes that shape — this is not the same as an end-to-end run against a real `nuxt prepare`/`nuxt build`, which has not been verified in this environment (see the [Nuxt](#nuxt) section above).
+The Nuxt ambient auto-import shape (`declare const x: typeof import(...)`) is covered by a unit test in the host CLI that hand-writes that shape. A real `nuxt prepare` project was also checked end to end by hand, but that check is not part of the automated suite (see the [Nuxt](#nuxt) section above).
 
 Run locally:
 

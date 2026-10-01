@@ -1,6 +1,6 @@
 {
   "name": "@eventra_dev/cli-plugin-vue",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Eventra CLI plugin — extract track() calls from Vue SFC (.vue) files",
   "license": "MIT",
   "type": "commonjs",
