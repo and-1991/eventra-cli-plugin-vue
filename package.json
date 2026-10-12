@@ -1,6 +1,6 @@
 {
   "name": "@eventra_dev/cli-plugin-vue",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Eventra CLI plugin — extract track() calls from Vue SFC (.vue) files",
   "license": "MIT",
   "author": {
@@ -34,7 +34,8 @@
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@vue/compiler-core": "^3.5.40",

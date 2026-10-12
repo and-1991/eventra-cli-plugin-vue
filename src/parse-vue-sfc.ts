@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { parse as parseSfc } from "@vue/compiler-sfc";
+import { firstContentLine, placeBlocks } from "./layout";
 import { parse as parseTemplate } from "@vue/compiler-dom";
 import { NodeTypes } from "@vue/compiler-core";
 import type {
@@ -16,6 +17,8 @@ export interface VueScriptBlock {
   readonly lang: string;
   readonly setup: boolean;
   readonly content: string;
+  /** 1-based line of the script's first character in the .vue file; unset for `src=` scripts. */
+  readonly startLine?: number;
 }
 
 /** A single `event="..."` binding found on an element in the `<template>`. */
@@ -93,12 +96,14 @@ export function parseVueSfc(source: string, filePath: string): ParsedVueSfc {
   const scripts: VueScriptBlock[] = [];
   for (const block of [descriptor.script, descriptor.scriptSetup]) {
     if (!block) continue;
-    const content = (block.src ? readSrcFile(filePath, block.src) : block.content)?.trim();
+    const raw = block.src ? readSrcFile(filePath, block.src) : block.content;
+    const content = raw?.trim();
     if (!content) continue;
     scripts.push({
       lang: (block.lang ?? "js").toLowerCase(),
       setup: Boolean(block.setup),
       content,
+      startLine: block.src ? undefined : firstContentLine(raw!, block.loc.start.line),
     });
   }
 
@@ -157,13 +162,11 @@ export function buildScriptModule(parsed: ParsedVueSfc): string {
   if (parsed.scripts.length === 0) {
     parts.push("export {}");
   } else {
-    for (const block of parsed.scripts) {
-      const header = [`// --- vue script${block.setup ? " setup" : ""} ---`];
-      if (block.lang !== "ts" && block.lang !== "tsx") {
-        header.push("// @ts-nocheck");
-      }
-      parts.push([...header, block.content].join("\n"));
-    }
+    // Only a leading `@ts-nocheck` is honoured by TypeScript, so only the
+    // first block decides. Blocks keep their original line numbers.
+    const first = parsed.scripts[0];
+    const noCheck = first.lang !== "ts" && first.lang !== "tsx";
+    parts.push(placeBlocks(parsed.scripts, noCheck ? "// @ts-nocheck" : undefined));
   }
 
   if (parsed.templateEvents.length > 0) {
