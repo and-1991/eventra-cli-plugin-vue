@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@eventra_dev/cli-plugin-vue"><img alt="npm version" src="https://img.shields.io/npm/v/@eventra_dev/cli-plugin-vue.svg?style=flat-square&color=blue"></a>
   <a href="https://www.npmjs.com/package/@eventra_dev/cli-plugin-vue"><img alt="npm downloads" src="https://img.shields.io/npm/dm/@eventra_dev/cli-plugin-vue.svg?style=flat-square&color=blue"></a>
-  <img alt="tests passing" src="https://img.shields.io/badge/tests-27%20passing-brightgreen?style=flat-square&logo=vitest&logoColor=white">
+  <img alt="tests passing" src="https://img.shields.io/badge/tests-51%20passing-brightgreen?style=flat-square&logo=vitest&logoColor=white">
   <img alt="coverage" src="https://img.shields.io/badge/coverage-100%25-brightgreen?style=flat-square&logo=vitest&logoColor=white">
   <img alt="node" src="https://img.shields.io/node/v/@eventra_dev/cli-plugin-vue?style=flat-square&color=darkgreen&logo=node.js&logoColor=white">
   <a href="https://www.typescriptlang.org/"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-ready-blue?style=flat-square&logo=typescript&logoColor=white"></a>
@@ -92,6 +92,19 @@ The expression is copied as-is into the same module scope as the script. If it r
 
 ---
 
+### `<template>` - calls in handlers and expressions
+
+Tracking calls written in the template itself are read, not only `event` attributes:
+
+```vue
+<template>
+  <button @click="() => { open(); trackEvent('plan:cogm_open', { id }) }">Open</button>
+  <p>{{ trackEvent('panel:viewed') }}</p>
+</template>
+```
+
+Read: `@click` / `v-on` handlers (one or several statements, multi-line arrow functions), `{{ }}` interpolations the source of `v-for` (`item in items()`), dynamic arguments (`:[name()]`, `@[event()]`) and the expressions of `v-bind`, `v-if`, `v-else-if`, `v-show`, `v-model`, `v-html` and `v-text`. They are placed in the same module as the script, so a function imported or defined there resolves normally; an argument that comes from a `v-for` variable is reported as a dynamic occurrence. The loop variables of `v-for` and `v-slot` parameters are not code and are skipped; the value of a custom directive (`v-focus="x"`) is left alone.
+
 ## Nuxt
 
 Nuxt pages, layouts, and components are ordinary `.vue` SFCs — parsed identically, no extra configuration needed.
@@ -121,7 +134,7 @@ export interface CliPluginVue {
 }
 ```
 
-No dependency on `@eventra_dev/eventra-cli` — the CLI adapts this shape internally. `.vue` → one virtual `.vue.ts` module (compiled script content, then a function wrapping synthetic calls for every template `event="..."` binding). `staticSinks` describes those synthetic calls; the CLI builds its own sink detector from them. See [`@eventra_dev/eventra-cli`'s plugin docs](https://www.npmjs.com/package/@eventra_dev/eventra-cli#plugin-contract-for-authors) for the full external-plugin contract.
+No dependency on `@eventra_dev/eventra-cli` - the CLI adapts this shape internally. `.vue` → one virtual `.vue.ts` module (compiled script content, then a function wrapping synthetic calls for every template `event="..."` binding and the handlers, interpolations and directive expressions copied from the template, under a `// --- vue template (auto-generated) ---` comment the CLI uses to tell generated code from your own lines). `staticSinks` describes those synthetic calls; the CLI builds its own sink detector from them. See [`@eventra_dev/eventra-cli`'s plugin docs](https://www.npmjs.com/package/@eventra_dev/eventra-cli#plugin-contract-for-authors) for the full external-plugin contract.
 
 ---
 
@@ -136,7 +149,7 @@ No dependency on `@eventra_dev/eventra-cli` — the CLI adapts this shape intern
 
 **100% statement/branch/function/line coverage** (v8 provider, `pnpm test:coverage`), enforced via a `coverage.thresholds` block in `vitest.config.ts`.
 
-**27 unit tests** (vitest), covering:
+**51 unit tests** (vitest), covering:
 
 | Area | Covers |
 |---|---|

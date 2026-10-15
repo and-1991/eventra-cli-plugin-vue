@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -297,5 +298,95 @@ describe("event names with spaces and colons", () => {
     const module = buildScriptModule(parsed);
     expect(module).toContain('__eventra_vue_template_event__("App: User Sign Up");');
     expect(module).toContain('__eventra_vue_template_event__("Say \\"Hi\\" Now");');
+  });
+});
+
+describe("template code (handlers, interpolations, directive expressions)", () => {
+  const codes = (template: string) => parseVueSfc(`<template>${template}</template>`, "/p/A.vue").templateHandlers;
+
+  it("collects @click / v-on handlers, as handlers", () => {
+    expect(codes(`<button @click="() => track('a')" v-on:focus="track('b')">x</button>`)).toEqual([
+      { handler: true, code: "() => track('a')" },
+      { handler: true, code: "track('b')" },
+    ]);
+  });
+
+  it("keeps a multi-statement handler whole", () => {
+    expect(codes(`<button @click="a(); track('x')">x</button>`)).toEqual([{ handler: true, code: "a(); track('x')" }]);
+  });
+
+  it("keeps a multi-line arrow function body", () => {
+    const [handler] = codes(`<button @click="() => {\n  open();\n  track('x', { id: 1 });\n}">x</button>`);
+    expect(handler?.code).toBe("() => {\n  open();\n  track('x', { id: 1 });\n}");
+  });
+
+  it("collects {{ }} interpolations and the expression of v-bind, v-if, v-show, v-model, v-html, v-text", () => {
+    expect(
+      codes(`<p v-if="a()" v-show="b()" :title="c()" v-html="d()" v-text="e()" v-model="f">{{ g() }}</p>`).map((c) => c.code),
+    ).toEqual(["a()", "b()", "c()", "d()", "e()", "f", "g()"]);
+  });
+
+  it("reads interpolations nested in elements and the source of v-for, but not its loop variables", () => {
+    expect(codes(`<ul><li v-for="i in items()">{{ t(i) }}</li></ul>`).map((c) => c.code)).toEqual(["items()", "t(i)"]);
+    expect(codes(`<ul><li v-for="(i, n) of pick('x')">x</li></ul>`).map((c) => c.code)).toEqual(["pick('x')"]);
+    expect(codes(`<ul><li v-for="n in 5">x</li></ul>`).map((c) => c.code)).toEqual(["5"]);
+  });
+
+  it("reads dynamic directive arguments", () => {
+    expect(codes(`<button :[name()]="1" @[evt('a')]="go">x</button>`)).toEqual([
+      { handler: false, code: "name()" },
+      { handler: false, code: "1" },
+      { handler: false, code: "evt('a')" },
+      { handler: true, code: "go" },
+    ]);
+  });
+
+  it("skips a v-for it cannot take apart, and an empty dynamic argument", () => {
+    expect(codes(`<ul><li v-for="items">x</li></ul>`)).toEqual([]);
+  });
+
+  it("does not treat the event= binding as handler code, and skips directives that are not code", () => {
+    expect(codes(`<Button :event="name" v-slot="{ a }" v-pre>x</Button>`)).toEqual([]);
+  });
+
+  it("does not read the value of a custom directive, which is whatever its author made of it", () => {
+    expect(codes(`<input v-focus="settings()" />`)).toEqual([]);
+  });
+
+  it("skips empty expressions", () => {
+    expect(codes(`<p>{{  }}</p><button @click="">x</button>`)).toEqual([]);
+  });
+
+  it("reads handlers from an external template file (src=)", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "vue-ext-"));
+    try {
+      writeFileSync(path.join(dir, "t.html"), `<button @click="track('ext')">x</button>`);
+      const parsed = parseVueSfc(`<template src="./t.html"></template>`, path.join(dir, "A.vue"));
+      expect(parsed.templateHandlers).toEqual([{ handler: true, code: "track('ext')" }]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("emits handlers as blocks and other expressions in parentheses", () => {
+    const module = buildScriptModule(
+      parseVueSfc(
+        `<script setup lang="ts">import { track } from './t';</script><template><button @click="a(); track('x')">{{ track('y') }}</button></template>`,
+        "/p/A.vue",
+      ),
+    );
+    expect(module).toContain("// --- vue template (auto-generated) ---");
+    expect(module).toContain("  {\na(); track('x')\n  }");
+    expect(module).toContain("  (track('y')\n  );");
+  });
+
+  it("parenthesises a handler that is a bare function expression", () => {
+    const module = buildScriptModule(parseVueSfc(`<template><button @click="function () { track('x') }">x</button></template>`, "/p/A.vue"));
+    expect(module).toContain("  (function () { track('x') }\n  );");
+  });
+
+  it("is not defeated by a trailing line comment in a handler", () => {
+    const module = buildScriptModule(parseVueSfc(`<template><button @click="track('x') // note">x</button></template>`, "/p/A.vue"));
+    expect(module).toContain("  {\ntrack('x') // note\n  }");
   });
 });

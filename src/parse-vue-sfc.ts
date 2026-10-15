@@ -28,9 +28,21 @@ export interface TemplateEventBinding {
   readonly value: string;
 }
 
+/** One piece of template code. A handler may be several statements; any other expression is a single one. */
+export interface TemplateHandler {
+  readonly handler: boolean;
+  readonly code: string;
+}
+
 export interface ParsedVueSfc {
   readonly scripts: readonly VueScriptBlock[];
   readonly templateEvents: readonly TemplateEventBinding[];
+  /**
+   * Raw JS of the template's own code, copied verbatim: event handlers (`@click="() => track('x')"`,
+   * `@click="a(); b()"`), `{{ }}` interpolations and the expressions of `v-bind`/`v-if`/`v-show`/...
+   * Any call to a tracking function in there is an event the component fires.
+   */
+  readonly templateHandlers: readonly TemplateHandler[];
   readonly errors: readonly string[];
 }
 
@@ -43,7 +55,18 @@ function readSrcFile(sfcPath: string, src: string): string | null {
   }
 }
 
-function collectEventBindings(root: RootNode, out: TemplateEventBinding[]): void {
+// the part of `item in items()` / `(item, i) of items()` that is an expression: after the `in` / `of`
+const V_FOR_SOURCE = /\s(?:in|of)\s+([\s\S]+)$/;
+
+// directives whose value is plain JS. `v-for` is handled apart (its value is `item in source`), and
+// `v-slot` (a parameter list), `v-pre` and `v-cloak` hold no expression
+const CODE_DIRECTIVES = new Set(["on", "bind", "if", "else-if", "show", "html", "text", "model"]);
+
+function collectEventBindings(
+  root: RootNode,
+  out: TemplateEventBinding[],
+  handlers: TemplateHandler[],
+): void {
   function visitChildren(children: readonly TemplateChildNode[]): void {
     for (const child of children) {
       visitNode(child);
@@ -71,6 +94,21 @@ function collectEventBindings(root: RootNode, out: TemplateEventBinding[]): void
         if (expr) {
           out.push({ kind: "dynamic", value: expr });
         }
+        continue;
+      }
+      if (prop.type !== NodeTypes.DIRECTIVE) continue;
+      // `:[expr]="..."` / `@[expr]="..."`: the argument is an expression of its own
+      if (prop.arg?.type === NodeTypes.SIMPLE_EXPRESSION && !prop.arg.isStatic) {
+        handlers.push({ handler: false, code: prop.arg.content.trim() });
+      }
+      if (prop.exp?.type !== NodeTypes.SIMPLE_EXPRESSION) continue;
+      if (prop.name === "for") {
+        const source = V_FOR_SOURCE.exec(prop.exp.content)?.[1]?.trim();
+        if (source) {
+          handlers.push({ handler: false, code: source });
+        }
+      } else if (CODE_DIRECTIVES.has(prop.name)) {
+        handlers.push({ handler: prop.name === "on", code: prop.exp.content.trim() });
       }
     }
   }
@@ -83,6 +121,14 @@ function collectEventBindings(root: RootNode, out: TemplateEventBinding[]): void
     if (node.type === NodeTypes.ELEMENT) {
       visitElementProps((node as ElementNode).props);
       visitChildren(node.children);
+      return;
+    }
+    // `{{ expr }}`
+    if (node.type === NodeTypes.INTERPOLATION && node.content.type === NodeTypes.SIMPLE_EXPRESSION) {
+      const code = node.content.content.trim();
+      if (code) {
+        handlers.push({ handler: false, code });
+      }
     }
   }
 
@@ -108,10 +154,11 @@ export function parseVueSfc(source: string, filePath: string): ParsedVueSfc {
   }
 
   const templateEvents: TemplateEventBinding[] = [];
+  const templateHandlers: TemplateHandler[] = [];
   const template = descriptor.template;
   if (template) {
     if (template.ast) {
-      collectEventBindings(template.ast, templateEvents);
+      collectEventBindings(template.ast, templateEvents, templateHandlers);
     } else {
       // @vue/compiler-sfc only ever leaves `ast` unset when `src` is set
       // (external template file) - the `else` here is a defensive fallback,
@@ -120,7 +167,7 @@ export function parseVueSfc(source: string, filePath: string): ParsedVueSfc {
       if (template.src) {
         const external = readSrcFile(filePath, template.src);
         if (external) {
-          collectEventBindings(parseTemplate(external), templateEvents);
+          collectEventBindings(parseTemplate(external), templateEvents, templateHandlers);
         }
       }
     }
@@ -129,6 +176,8 @@ export function parseVueSfc(source: string, filePath: string): ParsedVueSfc {
   return {
     scripts,
     templateEvents,
+    // an empty expression (`@click=""`) holds no code
+    templateHandlers: templateHandlers.filter((handler) => handler.code !== ""),
     errors: errors.map((error) => {
       // @vue/compiler-sfc errors are always Error instances
       /* v8 ignore else */
@@ -169,11 +218,14 @@ export function buildScriptModule(parsed: ParsedVueSfc): string {
     parts.push(placeBlocks(parsed.scripts, noCheck ? "// @ts-nocheck" : undefined));
   }
 
-  if (parsed.templateEvents.length > 0) {
+  if (parsed.templateEvents.length > 0 || parsed.templateHandlers.length > 0) {
     const lines = [
       "// --- vue template (auto-generated) ---",
       `declare function ${TEMPLATE_EVENT_CALLEE}(name: string): void;`,
       "function __eventraVueTemplate() {",
+      // template code goes through the same detection as script code, so a call to a tracking
+      // function inside a handler or an interpolation is an event like any other
+      ...parsed.templateHandlers.map(renderTemplateCode),
       ...parsed.templateEvents.map((binding) =>
         binding.kind === "literal"
           ? `  ${TEMPLATE_EVENT_CALLEE}("${escapeString(binding.value)}");`
@@ -185,6 +237,19 @@ export function buildScriptModule(parsed: ParsedVueSfc): string {
   }
 
   return `${parts.join("\n\n")}\n`;
+}
+
+/**
+ * A handler is a statement list when it is written as one (`a(); b()`), an expression otherwise
+ * (`() => a()`, `handler`); both are valid as the body of a block, except a bare `function` which
+ * would read as a declaration. Other expressions are parenthesised: `{ a: 1 }` is an object here.
+ * The closing brace sits on its own line, so a trailing `// comment` cannot swallow it.
+ */
+function renderTemplateCode({ handler, code }: TemplateHandler): string {
+  if (handler && !/^(async\s+)?function\b/.test(code)) {
+    return `  {\n${code}\n  }`;
+  }
+  return `  (${code}\n  );`;
 }
 
 function escapeString(value: string): string {
