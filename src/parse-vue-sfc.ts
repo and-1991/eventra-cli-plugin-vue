@@ -76,7 +76,7 @@ function collectEventBindings(
   function visitElementProps(props: readonly (AttributeNode | DirectiveNode)[]): void {
     for (const prop of props) {
       if (prop.type === NodeTypes.ATTRIBUTE && prop.name === "event") {
-        const value = prop.value?.content?.trim();
+        const value = prop.value?.content.trim();
         if (value) {
           out.push({ kind: "literal", value });
         }
@@ -99,11 +99,11 @@ function collectEventBindings(
       if (prop.type !== NodeTypes.DIRECTIVE) continue;
       // `:[expr]="..."` / `@[expr]="..."`: the argument is an expression of its own
       if (prop.arg?.type === NodeTypes.SIMPLE_EXPRESSION && !prop.arg.isStatic) {
-        handlers.push({ handler: false, code: prop.arg.content.trim() });
+        handlers.push({ handler: false, code: prop.arg.content });
       }
       if (prop.exp?.type !== NodeTypes.SIMPLE_EXPRESSION) continue;
       if (prop.name === "for") {
-        const source = V_FOR_SOURCE.exec(prop.exp.content)?.[1]?.trim();
+        const source = V_FOR_SOURCE.exec(prop.exp.content)?.[1].trim();
         if (source) {
           handlers.push({ handler: false, code: source });
         }
@@ -125,10 +125,8 @@ function collectEventBindings(
     }
     // `{{ expr }}`
     if (node.type === NodeTypes.INTERPOLATION && node.content.type === NodeTypes.SIMPLE_EXPRESSION) {
-      const code = node.content.content.trim();
-      if (code) {
-        handlers.push({ handler: false, code });
-      }
+      // Vue already trims the expression; an empty `{{ }}` is dropped with the other empty expressions at the end of parseVueSfc
+      handlers.push({ handler: false, code: node.content.content });
     }
   }
 
