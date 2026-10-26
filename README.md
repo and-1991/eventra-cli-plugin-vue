@@ -112,8 +112,10 @@ The prop does not have to be named `event`. If a component sends one of its prop
 ```vue
 <!-- Button.vue -->
 <script setup lang="ts">
+import { Eventra } from '@eventra_dev/eventra-sdk'
+const tracker = new Eventra({ apiKey: 'YOUR_KEY' })
 const props = defineProps<{ analyticsName: string }>()
-function onClick() { trackEvent(props.analyticsName) }
+function onClick() { tracker.track(props.analyticsName) }
 </script>
 <template><button @click="onClick"><slot /></button></template>
 
@@ -124,7 +126,7 @@ import Button from './Button.vue'
 <template><Button analytics-name="checkout.cta">Pay</Button></template>
 ```
 
-`checkout.cta` is found. It works with `defineProps<{ ... }>()`, `defineProps([...])`, `defineProps({ ... })`, `withDefaults(...)`, a props object (`const props = defineProps(...)`) and a destructuring (`const { analyticsName } = defineProps(...)`), and also when the template reads the prop by its bare name (`@click="trackEvent(analyticsName)"`). A prop handed on to another component (`<Inner :name="props.analyticsName" />`) is followed. Props the component never tracks are not events. A prop that comes from a `v-for` variable is reported as a dynamic occurrence.
+`checkout.cta` is found. It works with `defineProps<{ ... }>()`, `defineProps([...])`, `defineProps({ ... })`, `withDefaults(...)`, a props object (`const props = defineProps(...)`) and a destructuring (`const { analyticsName } = defineProps(...)`), and also when the template reads the prop by its bare name (`@click="tracker.track(analyticsName)"`). A prop handed on to another component (`<Inner :name="props.analyticsName" />`) is followed. Props the component never tracks are not events. A prop that comes from a `v-for` variable is reported as a dynamic occurrence.
 
 Not followed: Options API components (`props: [...]` read through `this`), `v-bind="obj"` spreads, components registered by name instead of imported, and a component whose normal `<script>` has its own `export default`.
 
