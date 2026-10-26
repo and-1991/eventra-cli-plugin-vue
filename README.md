@@ -128,7 +128,15 @@ import Button from './Button.vue'
 
 `checkout.cta` is found. It works with `defineProps<{ ... }>()`, `defineProps([...])`, `defineProps({ ... })`, `withDefaults(...)`, a props object (`const props = defineProps(...)`) and a destructuring (`const { analyticsName } = defineProps(...)`), and also when the template reads the prop by its bare name (`@click="tracker.track(analyticsName)"`). A prop handed on to another component (`<Inner :name="props.analyticsName" />`) is followed. Props the component never tracks are not events. A prop that comes from a `v-for` variable is reported as a dynamic occurrence.
 
-Not followed: Options API components (`props: [...]` read through `this`), `v-bind="obj"` spreads, components registered by name instead of imported, and a component whose normal `<script>` has its own `export default`.
+**Not followed** (those components are scanned as before, so nothing is lost, but a prop that only they use is not found):
+
+- Options API components (`props: [...]` read through `this`).
+- `v-bind="obj"` spreads.
+- Components registered by name instead of imported, and dynamic components (`<component :is="X">`).
+- Nuxt auto-imported components (used with no `import`): the tag is not matched to its file.
+- A component whose normal `<script>` has its own `export default`, an `export` other than a type in `<script setup>`, an import after other code, or a `src=` script.
+
+A value the CLI cannot resolve to a plain string (a `v-for` variable, a prop of the page itself) is listed under "Dynamic event names" instead of becoming an event. The same list shows the tracking call inside the component itself, one line per component, because what it tracks is whatever each caller passes; the callers that pass a literal are still found.
 
 ## Nuxt
 
