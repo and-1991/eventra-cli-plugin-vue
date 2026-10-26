@@ -27,7 +27,7 @@ export async function transformVueSfc(
     modules: [
       {
         path: scriptVirtualPath(input.path),
-        content: buildScriptModule(parsed),
+        content: buildScriptModule(parsed, input.path),
       },
     ],
   };

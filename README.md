@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@eventra_dev/cli-plugin-vue"><img alt="npm version" src="https://img.shields.io/npm/v/@eventra_dev/cli-plugin-vue.svg?style=flat-square&color=blue"></a>
   <a href="https://www.npmjs.com/package/@eventra_dev/cli-plugin-vue"><img alt="npm downloads" src="https://img.shields.io/npm/dm/@eventra_dev/cli-plugin-vue.svg?style=flat-square&color=blue"></a>
-  <img alt="tests passing" src="https://img.shields.io/badge/tests-51%20passing-brightgreen?style=flat-square&logo=vitest&logoColor=white">
+  <img alt="tests passing" src="https://img.shields.io/badge/tests-127%20passing-brightgreen?style=flat-square&logo=vitest&logoColor=white">
   <img alt="coverage" src="https://img.shields.io/badge/coverage-100%25-brightgreen?style=flat-square&logo=vitest&logoColor=white">
   <img alt="node" src="https://img.shields.io/node/v/@eventra_dev/cli-plugin-vue?style=flat-square&color=darkgreen&logo=node.js&logoColor=white">
   <a href="https://www.typescriptlang.org/"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-ready-blue?style=flat-square&logo=typescript&logoColor=white"></a>
@@ -105,6 +105,29 @@ Tracking calls written in the template itself are read, not only `event` attribu
 
 Read: `@click` / `v-on` handlers (one or several statements, multi-line arrow functions), `{{ }}` interpolations the source of `v-for` (`item in items()`), dynamic arguments (`:[name()]`, `@[event()]`) and the expressions of `v-bind`, `v-if`, `v-else-if`, `v-show`, `v-model`, `v-html` and `v-text`. They are placed in the same module as the script, so a function imported or defined there resolves normally; an argument that comes from a `v-for` variable is reported as a dynamic occurrence. The loop variables of `v-for` and `v-slot` parameters are not code and are skipped; the value of a custom directive (`v-focus="x"`) is left alone.
 
+### Props of a component, whatever they are called
+
+The prop does not have to be named `event`. If a component sends one of its props to a tracking call, every place that uses the component with a value for that prop is an event:
+
+```vue
+<!-- Button.vue -->
+<script setup lang="ts">
+const props = defineProps<{ analyticsName: string }>()
+function onClick() { trackEvent(props.analyticsName) }
+</script>
+<template><button @click="onClick"><slot /></button></template>
+
+<!-- Page.vue -->
+<script setup lang="ts">
+import Button from './Button.vue'
+</script>
+<template><Button analytics-name="checkout.cta">Pay</Button></template>
+```
+
+`checkout.cta` is found. It works with `defineProps<{ ... }>()`, `defineProps([...])`, `defineProps({ ... })`, `withDefaults(...)`, a props object (`const props = defineProps(...)`) and a destructuring (`const { analyticsName } = defineProps(...)`), and also when the template reads the prop by its bare name (`@click="trackEvent(analyticsName)"`). A prop handed on to another component (`<Inner :name="props.analyticsName" />`) is followed. Props the component never tracks are not events. A prop that comes from a `v-for` variable is reported as a dynamic occurrence.
+
+Not followed: Options API components (`props: [...]` read through `this`), `v-bind="obj"` spreads, components registered by name instead of imported, and a component whose normal `<script>` has its own `export default`.
+
 ## Nuxt
 
 Nuxt pages, layouts, and components are ordinary `.vue` SFCs — parsed identically, no extra configuration needed.
@@ -149,7 +172,7 @@ No dependency on `@eventra_dev/eventra-cli` - the CLI adapts this shape internal
 
 **100% statement/branch/function/line coverage** (v8 provider, `pnpm test:coverage`), enforced via a `coverage.thresholds` block in `vitest.config.ts`.
 
-**51 unit tests** (vitest), covering:
+**127 unit tests** (vitest), covering:
 
 | Area | Covers |
 |---|---|
@@ -157,6 +180,7 @@ No dependency on `@eventra_dev/eventra-cli` - the CLI adapts this shape internal
 | Template — literal | Nested elements, `v-if`/`v-for`, slots, multiple template roots |
 | Template — dynamic | Raw expression passthrough, resolution through the merged script scope |
 | Script-setup macros | All five compiler macros (`defineProps`/`defineEmits`/`defineExpose`/`defineOptions`/`withDefaults`) pass through without special-casing |
+| Component props | `defineProps` in every spelling, props read through an object, a destructuring and bare template names, child components called with their props, name matching of tags to imports |
 | Virtual module output | Single combined `.vue.ts`, export stub when script/template are empty |
 | Plugin contract | `match()`, `includeGlobs`, `staticSinks`, `transform()` |
 
