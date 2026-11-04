@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { scriptBindings, wrapScriptSetup } from "../src/component";
+import { scriptBindings, wrapOptionsApi, wrapScriptSetup } from "../src/component";
 import { buildScriptModule, parseVueSfc } from "../src/parse-vue-sfc";
 import type { VueScriptBlock } from "../src/parse-vue-sfc";
 
@@ -236,8 +236,13 @@ describe("buildScriptModule: attributes of a child component", () => {
   });
 
   it("skips a binding with nothing to read, a dynamic argument and a boolean attribute", () => {
-    const text = module(`<script setup>\nimport B from "./b.vue";\n</script>\n<template><B :[name]="1" v-if="ok" :empty="" disabled /><B v-bind="obj" /></template>`);
+    const text = module(`<script setup>\nimport B from "./b.vue";\n</script>\n<template><B :[name]="1" v-if="ok" :empty="" disabled /><B v-bind=" " /></template>`);
     expect(text).not.toContain("B(");
+  });
+
+  it("reads v-bind=\"obj\" as a spread, in its place among the props", () => {
+    const text = module(`<script setup>\nimport B from "./b.vue";\n</script>\n<template><B a="1" v-bind="obj" :b="y" /></template>`);
+    expect(text).toContain('B({ a: "1", ...(obj\n), b: (y\n) });');
   });
 });
 
@@ -316,5 +321,68 @@ describe("component.ts: the parameter text", () => {
   it("drops the space before a type annotation", () => {
     expect(code("const { a } : Props = defineProps(['a']);")).toContain("function B({ a }: any) {");
     expect(code("const { a } : Props = defineProps(['a', 'b']);")).toContain("function B({ a, b }: any) {");
+  });
+});
+
+describe("wrapOptionsApi", () => {
+  const options = (content: string, lang = "ts"): VueScriptBlock => ({ lang, setup: false, content, startLine: 1 });
+
+  it("makes an options object with an array of props a function of them, and reads this.<prop> off the parameter", () => {
+    const wrapped = wrapOptionsApi(options(`import { sdk } from "./sdk";\nexport default {\n  props: ["track", "label"],\n  methods: { go() { sdk.track(this.track); }, other() { return this.data; } },\n};`), "Button");
+    expect(wrapped?.propNames).toEqual(["track", "label"]);
+    expect(wrapped?.code).toBe(`import { sdk } from "./sdk";\nfunction Button(__props: any) { const __options = {\n  props: ["track", "label"],\n  methods: { go() { sdk.track(__props.track); }, other() { return this.data; } },\n};`);
+  });
+
+  it("reads an object of props and defineComponent, keeping the line breaks", () => {
+    const wrapped = wrapOptionsApi(options(`export default defineComponent(\n{\n  props: { track: String, label: { type: String } },\n  computed: { n() { return this.track; } },\n}\n);`), "B");
+    expect(wrapped?.propNames).toEqual(["track", "label"]);
+    expect(wrapped?.code.split("\n")).toHaveLength(6);
+    expect(wrapped?.code).toContain("return __props.track;");
+    expect(wrapped?.code).toContain("function B(__props: any) { const __options = ");
+    expect(wrapped?.code).not.toContain("export default");
+    expect(wrapped?.code.trimEnd().endsWith(";")).toBe(true);
+  });
+
+  it("reads this destructured, through an arrow, and leaves the this of a nested function alone", () => {
+    const wrapped = wrapOptionsApi(options(`export default { props: ["track"], methods: { a() { const { track } = this; t(track); }, b() { return () => this.track; }, c() { return function () { return this.track; }; } } };`), "B");
+    expect(wrapped?.code).toContain("const { track } = __props;");
+    expect(wrapped?.code).toContain("() => __props.track");
+    expect(wrapped?.code).toContain("return this.track; }");
+  });
+
+  it("reads props through the odd shapes an options object can have", () => {
+    // a spread, a method and a computed key before props, a string key, and holes or non-strings in the array
+    const array = wrapOptionsApi(options(`export default { ...base, setup() {}, [k]: 1, "props": ["a", , 1, "b"], methods: { f() { return [this.a, , this.b, this[x]]; } } };`), "B");
+    expect(array?.propNames).toEqual(["a", "b"]);
+    expect(array?.code).toContain("[__props.a, , __props.b, this[x]]");
+    // an object of props with a spread, a method, a string key and a computed key
+    const object = wrapOptionsApi(options(`export default { props: { ...shared, a: String, "b-c": Number, d() {}, [e]: String, "ok": Boolean } };`), "B");
+    expect(object?.propNames).toEqual(["a", "b-c", "d", "ok"]);
+  });
+
+  it("is async when the options use await", () => {
+    expect(wrapOptionsApi(options(`export default { props: ["a"], async mounted() { await x(); } };`), "B")?.code).toContain("async function B(");
+  });
+
+  it("returns null for a setup block, a component without props or without a plain options object, or with code after the export", () => {
+    expect(wrapOptionsApi(setup(`export default { props: ["a"] };`), "B")).toBeNull();
+    expect(wrapOptionsApi(options(`export default { methods: {} };`), "B")).toBeNull();
+    expect(wrapOptionsApi(options(`export default { props: [] };`), "B")).toBeNull();
+    expect(wrapOptionsApi(options(`export default { props: somePropsVariable };`), "B")).toBeNull();
+    expect(wrapOptionsApi(options(`export default someOptions;`), "B")).toBeNull();
+    expect(wrapOptionsApi(options(`export default { props: ["a"] };\nexport const x = 1;`), "B")).toBeNull();
+    expect(wrapOptionsApi(options(`const o = { props: ["a"] };`), "B")).toBeNull();
+    expect(wrapOptionsApi(options(`export default {{{`), "B")).toBeNull();
+    expect(wrapOptionsApi({ lang: "ts", setup: false, content: `export default { props: ["a"] };` }, "B")).toBeNull();
+  });
+});
+
+describe("buildScriptModule: Options API component", () => {
+  it("exports the component as a function of its props, so a parent's prop is followed into this.<prop>", () => {
+    const code = module(`<script lang="ts">\nimport { sdk } from "./sdk";\nexport default {\n  props: ["track"],\n  methods: { go() { sdk.track(this.track); } },\n};\n</script>\n<template><button @click="go">x</button></template>`);
+    expect(code).toContain("function Button(__props: any) { const __options = {");
+    expect(code).toContain("sdk.track(__props.track)");
+    expect(code).toContain("export default Button;");
+    expect(code.match(/export default/g)).toHaveLength(1);
   });
 });

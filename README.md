@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@eventra_dev/cli-plugin-vue"><img alt="npm version" src="https://img.shields.io/npm/v/@eventra_dev/cli-plugin-vue.svg?style=flat-square&color=blue"></a>
   <a href="https://www.npmjs.com/package/@eventra_dev/cli-plugin-vue"><img alt="npm downloads" src="https://img.shields.io/npm/dm/@eventra_dev/cli-plugin-vue.svg?style=flat-square&color=blue"></a>
-  <img alt="tests passing" src="https://img.shields.io/badge/tests-139%20passing-brightgreen?style=flat-square&logo=vitest&logoColor=white">
+  <img alt="tests passing" src="https://img.shields.io/badge/tests-147%20passing-brightgreen?style=flat-square&logo=vitest&logoColor=white">
   <img alt="coverage" src="https://img.shields.io/badge/coverage-100%25-brightgreen?style=flat-square&logo=vitest&logoColor=white">
   <img alt="node" src="https://img.shields.io/node/v/@eventra_dev/cli-plugin-vue?style=flat-square&color=darkgreen&logo=node.js&logoColor=white">
   <a href="https://www.typescriptlang.org/"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-ready-blue?style=flat-square&logo=typescript&logoColor=white"></a>
@@ -130,13 +130,13 @@ import Button from './Button.vue'
 
 **Not followed** (those components are scanned as before, so nothing is lost, but a prop that only they use is not found):
 
-- Options API components (`props: [...]` read through `this`).
-- `v-bind="obj"` spreads.
+- An Options API component whose `export default` is not the last statement of its `<script>`, whose `props` is not written out in the object (`props: sharedProps`), or whose `this` is read inside a nested `function` (an arrow keeps it). A component with `props: [...]` or `props: { ... }` and `this.x` in its methods is followed, with or without `defineComponent`.
+- `v-bind="obj"` when `obj` is not an object the analysis can see into (a call, a parameter of the page); an object written out or held in a `const` is read, in its place among the props.
 - Components registered by name instead of imported, and dynamic components (`<component :is="X">`).
 - Nuxt auto-imported components (used with no `import`): the tag is not matched to its file.
 - A component whose normal `<script>` has its own `export default`, an `export` other than a type in `<script setup>`, an import after other code, or a `src=` script.
 
-A value the CLI cannot resolve to a plain string (a `v-for` variable, a prop of the page itself) is listed under "Dynamic event names" instead of becoming an event. The same list shows the tracking call inside the component itself, one line per component, because what it tracks is whatever each caller passes; the callers that pass a literal are still found.
+A value the CLI cannot resolve to a plain string (a `v-for` variable, a prop of the page itself) is listed under "Dynamic event names" instead of becoming an event, with the reason (`env`, `variable`, `template`, `call`, `expression`). The tracking call inside the component itself is listed apart, under "Inside a wrapper", because what it tracks is whatever each caller passes; the callers that pass a literal are still found.
 
 ## Nuxt
 
@@ -182,7 +182,7 @@ No dependency on `@eventra_dev/eventra-cli` - the CLI adapts this shape internal
 
 **100% statement/branch/function/line coverage** (v8 provider, `pnpm test:coverage`), enforced via a `coverage.thresholds` block in `vitest.config.ts`.
 
-**139 unit tests** (vitest), covering:
+**147 unit tests** (vitest), covering:
 
 | Area | Covers |
 |---|---|

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { parse as parseSfc } from "@vue/compiler-sfc";
-import { scriptBindings, wrapScriptSetup } from "./component";
+import { scriptBindings, wrapOptionsApi, wrapScriptSetup } from "./component";
 import { firstContentLine, placeBlocks } from "./layout";
 import { parse as parseTemplate } from "@vue/compiler-dom";
 import { NodeTypes } from "@vue/compiler-core";
@@ -39,7 +39,8 @@ export interface TemplateHandler {
 export interface TemplateComponentProp {
   /** camelCased, the way the child declares it */
   readonly name: string;
-  readonly kind: "literal" | "expression";
+  /** `spread`: `v-bind="obj"`, whose properties are props in the place it stands among the others (`name` is empty). */
+  readonly kind: "literal" | "expression" | "spread";
   readonly value: string;
 }
 
@@ -98,6 +99,11 @@ function collectEventBindings(
     for (const prop of props) {
       if (prop.type === NodeTypes.ATTRIBUTE) {
         if (prop.value) found.push({ name: camelize(prop.name), kind: "literal", value: prop.value.content });
+        continue;
+      }
+      // `v-bind="obj"`: every property of the object is a prop, and a later prop wins over it, as at runtime
+      if (prop.name === "bind" && !prop.arg && prop.exp?.type === NodeTypes.SIMPLE_EXPRESSION && prop.exp.content.trim()) {
+        found.push({ name: "", kind: "spread", value: prop.exp.content.trim() });
         continue;
       }
       // `:track="expr"`; the same-name shorthand `:track` has no expression and reads the variable of that name
@@ -257,7 +263,8 @@ export function buildScriptModule(parsed: ParsedVueSfc, filePath = ""): string {
   const last = parsed.scripts[parsed.scripts.length - 1];
   const others = last ? scriptBindings(parsed.scripts.slice(0, -1)) : undefined;
   if (last && !others?.hasDefaultExport) {
-    const wrapped = wrapScriptSetup(last, componentName(filePath, bindings.declared), others!.declared);
+    const name = componentName(filePath, bindings.declared);
+    const wrapped = wrapScriptSetup(last, name, others!.declared) ?? wrapOptionsApi(last, name);
     if (wrapped) {
       scripts = [...parsed.scripts.slice(0, -1), { ...last, content: wrapped.code }];
       component = wrapped.name;
@@ -326,6 +333,7 @@ function componentCalls(usages: readonly TemplateComponentUsage[], components: r
     const binding = [usage.tag, camel, pascal].find((candidate) => components.includes(candidate));
     if (!binding) continue;
     const props = usage.props.map((prop) => {
+      if (prop.kind === "spread") return `...(${prop.value}\n)`;
       const key = KEY.test(prop.name) ? prop.name : `"${escapeString(prop.name)}"`;
       return `${key}: ${prop.kind === "literal" ? `"${escapeString(prop.value)}"` : `(${prop.value}\n)`}`;
     });

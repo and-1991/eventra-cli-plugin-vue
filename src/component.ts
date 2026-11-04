@@ -235,3 +235,93 @@ export function wrapScriptSetup(block: VueScriptBlock, componentName: string, de
   code = code.slice(0, headerAt) + header + code.slice(headerAt);
   return { code, propNames: names, name: componentName };
 }
+
+/** `props: ["a", "b"]` or `props: { a: String, b: { type: String } }` of an options object: the names a parent can pass. */
+function optionsPropNames(options: BabelNode): string[] | null {
+  for (const property of options.properties as BabelNode[]) {
+    if (property.type !== "ObjectProperty" || property.computed) continue;
+    const key = property.key as BabelNode;
+    if (!(key.type === "Identifier" ? key.name === "props" : key.type === "StringLiteral" && key.value === "props")) continue;
+    const value = property.value as BabelNode;
+    const names: string[] = [];
+    if (value.type === "ArrayExpression") {
+      for (const element of value.elements) if (element?.type === "StringLiteral") names.push(element.value);
+    } else if (value.type === "ObjectExpression") {
+      for (const prop of value.properties as BabelNode[]) {
+        if (prop.type !== "ObjectProperty" && prop.type !== "ObjectMethod") continue;
+        if (prop.key.type === "Identifier" && !prop.computed) names.push(prop.key.name);
+        else if (prop.key.type === "StringLiteral") names.push(prop.key.value);
+      }
+    } else {
+      return null;
+    }
+    return names;
+  }
+  return null;
+}
+
+// a nested `function` has a `this` of its own, so a `this.x` inside it is not the component's
+const OWN_THIS = new Set(["FunctionExpression", "FunctionDeclaration", "ClassMethod", "ClassPrivateMethod", "ClassDeclaration", "ClassExpression"]);
+
+function thisEdits(node: BabelNode, props: ReadonlySet<string>, out: { start: number; end: number; text: string }[]): void {
+  if (OWN_THIS.has(node.type)) return;
+  // this.track -> __props.track
+  if (node.type === "MemberExpression" && node.object.type === "ThisExpression" && !node.computed && node.property.type === "Identifier" && props.has(node.property.name)) {
+    out.push({ start: node.start, end: node.end, text: `__props.${node.property.name}` });
+    return;
+  }
+  // const { track } = this -> const { track } = __props
+  if (node.type === "VariableDeclarator" && node.id.type === "ObjectPattern" && node.init?.type === "ThisExpression") {
+    out.push({ start: node.init.start, end: node.init.end, text: "__props" });
+  }
+  for (const key of Object.keys(node)) {
+    if (key === "loc" || key === "leadingComments" || key === "trailingComments" || key === "innerComments") continue;
+    const child = node[key];
+    if (Array.isArray(child)) {
+      for (const item of child) if (item && typeof item.type === "string") thisEdits(item as BabelNode, props, out);
+    } else if (child && typeof child.type === "string") {
+      thisEdits(child as BabelNode, props, out);
+    }
+  }
+}
+
+/**
+ * Turns an Options API component that declares `props` into a function of them, like `wrapScriptSetup` does
+ * for `<script setup>`, so a prop that reaches a track() call through `this` is followed from the parent:
+ *
+ *   export default { props: ["track"], methods: { go() { sdk.track(this.track) } } }
+ *   ->  function Button(__props: any) { const __options = { ...  go() { sdk.track(__props.track) } } ...
+ *
+ * `defineComponent({...})` is read the same way. Statements keep their line numbers. Returns null when the
+ * block is not an options component with `props`, when `export default` is not the last statement, or when
+ * it is written some other way, in which case the component is scanned as before.
+ */
+export function wrapOptionsApi(block: VueScriptBlock, componentName: string): ComponentModule | null {
+  if (block.setup || block.startLine === undefined) return null;
+  const statements = parseScript(block);
+  if (!statements) return null;
+  const last = statements[statements.length - 1];
+  if (last?.type !== "ExportDefaultDeclaration") return null;
+
+  let options = last.declaration as BabelNode;
+  if (options.type === "CallExpression" && options.callee.type === "Identifier" && options.callee.name === "defineComponent" && options.arguments.length === 1) {
+    options = options.arguments[0] as BabelNode;
+  }
+  if (options.type !== "ObjectExpression") return null;
+  const names = optionsPropNames(options);
+  if (!names || names.length === 0) return null;
+
+  const edits: { start: number; end: number; text: string }[] = [];
+  thisEdits(options, new Set(names), edits);
+  // the header replaces `export default [defineComponent(]`, and what follows the options is dropped
+  // (`)` and `;`), keeping the line breaks of both, so the lines of the code keep their numbers
+  const header = `${/\bawait\b/.test(block.content) ? "async " : ""}function ${componentName}(__props: any) { const __options = `;
+  edits.push({ start: last.start, end: options.start, text: header + blank(block.content.slice(last.start, options.start)) });
+  edits.push({ start: options.end, end: last.end, text: `;${blank(block.content.slice(options.end, last.end))}` });
+
+  let code = block.content;
+  for (const edit of edits.sort((a, b) => b.start - a.start)) {
+    code = code.slice(0, edit.start) + edit.text + code.slice(edit.end);
+  }
+  return { code, propNames: names, name: componentName };
+}
