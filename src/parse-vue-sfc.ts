@@ -61,6 +61,10 @@ export interface ParsedVueSfc {
   readonly templateHandlers: readonly TemplateHandler[];
   /** Every element in the template that carries props, for the ones that turn out to be imported components. */
   readonly componentUsages?: readonly TemplateComponentUsage[];
+  /** Absolute paths of the files `<script src>` and `<template src>` point at (also those that are not there yet). */
+  readonly srcFiles: readonly string[];
+  /** The `src` of a `<script src>` or `<template src>` whose file could not be read: nothing of it is in the scan. */
+  readonly missingSrc: readonly string[];
   readonly errors: readonly string[];
 }
 
@@ -80,7 +84,7 @@ const V_FOR_SOURCE = /\s(?:in|of)\s+([\s\S]+)$/;
 
 // directives whose value is plain JS. `v-for` is handled apart (its value is `item in source`), and
 // `v-slot` (a parameter list), `v-pre` and `v-cloak` hold no expression
-const CODE_DIRECTIVES = new Set(["on", "bind", "if", "else-if", "show", "html", "text", "model"]);
+const CODE_DIRECTIVES = new Set(["on", "bind", "if", "else-if", "show", "html", "text", "model", "memo"]);
 
 function collectEventBindings(
   root: RootNode,
@@ -182,9 +186,14 @@ export function parseVueSfc(source: string, filePath: string): ParsedVueSfc {
   const { descriptor, errors } = parseSfc(source, { filename: filePath });
 
   const scripts: VueScriptBlock[] = [];
+  const srcFiles: string[] = [];
+  const missingSrc: string[] = [];
+  const resolveSrc = (src: string): string => path.resolve(path.dirname(filePath), src);
   for (const block of [descriptor.script, descriptor.scriptSetup]) {
     if (!block) continue;
+    if (block.src) srcFiles.push(resolveSrc(block.src));
     const raw = block.src ? readSrcFile(filePath, block.src) : block.content;
+    if (block.src && raw === null) missingSrc.push(block.src);
     const content = raw?.trim();
     if (!content) continue;
     scripts.push({
@@ -199,6 +208,7 @@ export function parseVueSfc(source: string, filePath: string): ParsedVueSfc {
   const templateHandlers: TemplateHandler[] = [];
   const componentUsages: TemplateComponentUsage[] = [];
   const template = descriptor.template;
+  if (template?.src) srcFiles.push(resolveSrc(template.src));
   if (template) {
     if (template.ast) {
       collectEventBindings(template.ast, templateEvents, templateHandlers, componentUsages);
@@ -209,6 +219,7 @@ export function parseVueSfc(source: string, filePath: string): ParsedVueSfc {
       /* v8 ignore else */
       if (template.src) {
         const external = readSrcFile(filePath, template.src);
+        if (external === null) missingSrc.push(template.src);
         if (external) {
           collectEventBindings(parseTemplate(external), templateEvents, templateHandlers, componentUsages);
         }
@@ -222,6 +233,8 @@ export function parseVueSfc(source: string, filePath: string): ParsedVueSfc {
     // an empty expression (`@click=""`) holds no code
     templateHandlers: templateHandlers.filter((handler) => handler.code !== ""),
     componentUsages,
+    srcFiles,
+    missingSrc,
     errors: errors.map((error) => {
       // @vue/compiler-sfc errors are always Error instances
       /* v8 ignore else */
@@ -232,9 +245,13 @@ export function parseVueSfc(source: string, filePath: string): ParsedVueSfc {
   };
 }
 
-/** Map `App.vue` → `App.vue.ts` (single virtual TS module for the compiler). */
-export function scriptVirtualPath(vuePath: string): string {
-  return vuePath.replace(/\.vue$/i, ".vue.ts");
+/**
+ * Map `App.vue` → `App.vue.ts` (single virtual TS module for the compiler), or `App.vue.tsx` when a script is JSX
+ * (`lang="tsx"` / `lang="jsx"`): the host CLI reads the kind of a file from its extension, and JSX in a `.ts` file is a
+ * syntax error.
+ */
+export function scriptVirtualPath(vuePath: string, jsx = false): string {
+  return vuePath.replace(/\.vue$/i, jsx ? ".vue.tsx" : ".vue.ts");
 }
 
 const TEMPLATE_EVENT_CALLEE = "__eventra_vue_template_event__";

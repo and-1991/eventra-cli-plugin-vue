@@ -23,6 +23,10 @@ export interface CliPluginStaticCalleeSink {
 
 export interface CliPluginTransformResult {
   readonly modules: readonly CliPluginVirtualModule[];
+  /** Hints about the file that are not errors (shown by the host CLI, never a failure). */
+  readonly notes?: readonly string[];
+  /** Other files the modules were built from: `eventra watch` rescans this file when one of them changes. */
+  readonly dependsOn?: readonly string[];
 }
 
 /** Contract for `@eventra_dev/cli-plugin-vue` and compatible CLI plugins. */

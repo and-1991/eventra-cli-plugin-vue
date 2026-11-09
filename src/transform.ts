@@ -1,6 +1,9 @@
 import { buildScriptModule, parseVueSfc, scriptVirtualPath } from "./parse-vue-sfc";
 import type { CliPluginTransformInput, CliPluginTransformResult } from "./types";
 
+// a template in another language is not HTML markup, so its events cannot be read
+const NON_HTML_TEMPLATE = /<template\b[^>]*\blang\s*=\s*["']?(pug|jade|haml|slm)\b/i;
+
 const EMPTY_SFC_ERROR = /^At least one <template> or <script> is required/;
 
 export async function transformVueSfc(
@@ -23,10 +26,17 @@ export async function transformVueSfc(
     );
   }
 
+  const language = NON_HTML_TEMPLATE.exec(input.source)?.[1]?.toLowerCase();
+  const notes = language ? [`<template lang="${language}"> is not read: events written in it are not in the scan (script events are).`] : [];
+  // a linked file that is not there is not an error (it may be generated), but nothing of it is in the scan
+  for (const src of parsed.missingSrc) notes.push(`"${src}" was not found: what it holds is not in the scan.`);
+
   return {
+    ...(notes.length > 0 ? { notes } : {}),
+    ...(parsed.srcFiles.length > 0 ? { dependsOn: parsed.srcFiles } : {}),
     modules: [
       {
-        path: scriptVirtualPath(input.path),
+        path: scriptVirtualPath(input.path, parsed.scripts.some((script) => script.lang === "tsx" || script.lang === "jsx")),
         content: buildScriptModule(parsed, input.path),
       },
     ],

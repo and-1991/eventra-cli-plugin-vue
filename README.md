@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@eventra_dev/cli-plugin-vue"><img alt="npm version" src="https://img.shields.io/npm/v/@eventra_dev/cli-plugin-vue.svg?style=flat-square&color=blue"></a>
   <a href="https://www.npmjs.com/package/@eventra_dev/cli-plugin-vue"><img alt="npm downloads" src="https://img.shields.io/npm/dm/@eventra_dev/cli-plugin-vue.svg?style=flat-square&color=blue"></a>
-  <img alt="tests passing" src="https://img.shields.io/badge/tests-147%20passing-brightgreen?style=flat-square&logo=vitest&logoColor=white">
+  <img alt="tests passing" src="https://img.shields.io/badge/tests-157%20passing-brightgreen?style=flat-square&logo=vitest&logoColor=white">
   <img alt="coverage" src="https://img.shields.io/badge/coverage-100%25-brightgreen?style=flat-square&logo=vitest&logoColor=white">
   <img alt="node" src="https://img.shields.io/node/v/@eventra_dev/cli-plugin-vue?style=flat-square&color=darkgreen&logo=node.js&logoColor=white">
   <a href="https://www.typescriptlang.org/"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-ready-blue?style=flat-square&logo=typescript&logoColor=white"></a>
@@ -138,6 +138,18 @@ import Button from './Button.vue'
 
 A value the CLI cannot resolve to a plain string (a `v-for` variable, a prop of the page itself) is listed under "Dynamic event names" instead of becoming an event, with the reason (`env`, `variable`, `template`, `call`, `expression`). The tracking call inside the component itself is listed apart, under "Inside a wrapper", because what it tracks is whatever each caller passes; the callers that pass a literal are still found.
 
+## `watch` and external files
+
+`<script src="...">` and `<template src="...">` point at other files. `eventra sync`, `check` and `eventra watch` read them, and `watch` rescans the component when one of those files changes (the plugin tells the CLI which files the component was built from).
+
+## Scripts in JSX, and linked files that are not there
+
+A script with `lang="tsx"` or `lang="jsx"` is read as TSX, so its JSX is not a syntax error. A `<script src>` or `<template src>` whose file does not exist gets a note from the CLI (what it holds is not in the scan). A syntax error in a linked `<script src>` file is reported against the `.vue` file with the line of the linked file.
+
+## Templates in other languages
+
+A `<template lang="pug">` (or `jade`, `haml`, `slm`) is not HTML markup and is not read: the plugin returns a note that the CLI prints after a scan, and the file's `<script>` is read as usual. An empty `event=""` attribute in a template is skipped without a note. `v-memo` is read like `v-if` and the other directives that hold code.
+
 ## Nuxt
 
 Nuxt pages, layouts, and components are ordinary `.vue` SFCs — parsed identically, no extra configuration needed.
@@ -182,7 +194,7 @@ No dependency on `@eventra_dev/eventra-cli` - the CLI adapts this shape internal
 
 **100% statement/branch/function/line coverage** (v8 provider, `pnpm test:coverage`), enforced via a `coverage.thresholds` block in `vitest.config.ts`.
 
-**147 unit tests** (vitest), covering:
+**157 unit tests** (vitest), covering:
 
 | Area | Covers |
 |---|---|
