@@ -27,3 +27,11 @@ describe("transformVueSfc empty components", () => {
     expect(result.modules).toHaveLength(1);
   });
 });
+
+describe("transformVueSfc template errors", () => {
+  it("names the line of a template error in the .vue file", async () => {
+    await expect(
+      transformVueSfc({ path: "/project/Broken.vue", source: "<template>\n<div>\n<p>\n</div>\n</template>\n" }),
+    ).rejects.toThrow(/Element is missing end tag\. \(line 3\)/);
+  });
+});

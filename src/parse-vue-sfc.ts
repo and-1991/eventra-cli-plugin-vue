@@ -238,7 +238,11 @@ export function parseVueSfc(source: string, filePath: string): ParsedVueSfc {
     errors: errors.map((error) => {
       // @vue/compiler-sfc errors are always Error instances
       /* v8 ignore else */
-      if (error instanceof Error) return error.message;
+      if (error instanceof Error) {
+        // a template error (`Element is missing end tag.`) carries its position in `loc`, 1-based in the .vue file
+        const line = (error as Error & { loc?: { start?: { line?: number } } }).loc?.start?.line;
+        return line !== undefined && !/\bline \d+\b/.test(error.message) ? `${error.message} (line ${line})` : error.message;
+      }
       /* v8 ignore next */
       return String(error);
     }),
