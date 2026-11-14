@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import ts from "typescript";
 
 import { scriptBindings, wrapOptionsApi, wrapScriptSetup } from "../src/component";
 import { buildScriptModule, parseVueSfc } from "../src/parse-vue-sfc";
@@ -212,6 +213,38 @@ describe("wrapScriptSetup: what the props are read from", () => {
     expect(parameter("const props = defineProps(['props', 'a']);")).toBe("props");
     expect(wrapScriptSetup(setup("const props = defineProps(['props']);"), "B", new Set())?.code).toBe("function B(props: any) {");
     expect(parameter("defineProps(['a-b', 'c']);")).toBe("{ c }");
+  });
+
+  it("does not make a local of a prop named by a reserved word, so the module still parses", () => {
+    const syntaxErrors = (code: string): number =>
+      (ts.createSourceFile("/B.vue.ts", code, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS) as ts.SourceFile & { parseDiagnostics: readonly unknown[] }).parseDiagnostics.length;
+    const reserved = ["class", "for", "default", "new", "await", "let", "static", "yield", "eval", "arguments"];
+    const type = reserved.map((name) => `${name}?: string`).join("; ");
+
+    const named = wrapScriptSetup(setup(`const props = defineProps<{ track: string; ${type} }>();`), "B", new Set());
+    // `await` among the names makes the function async, which is harmless
+    expect(named?.code).toBe("async function B(props: any) { const { track } = props;");
+    expect(named?.propNames).toEqual(["track", ...reserved]);
+
+    const destructured = wrapScriptSetup(setup(`const { track } = defineProps<{ track: string; class?: string; label: string }>();\nawait x;`), "B", new Set());
+    expect(destructured?.code).toContain("async function B({ track, label }: any) {");
+
+    const bare = wrapScriptSetup(setup(`defineProps<{ track: string; ${type} }>();`), "B", new Set());
+    expect(bare?.code).toContain("function B({ track }: any) {");
+
+    for (const wrapped of [named, destructured, bare]) expect(syntaxErrors(`${wrapped!.code}\n}`)).toBe(0);
+    expect(wrapScriptSetup(setup("defineProps(['class', 'for']);"), "B", new Set())).toBeNull();
+  });
+
+  it("keeps a template that reads a prop working when another prop is named by a reserved word", () => {
+    const code = module(`<script setup lang="ts">
+import { tracker } from "./tracker";
+const props = defineProps<{ track: string; class?: string; default?: string }>();
+</script>
+<template><button @click="tracker.track(track)">{{ props.class }}</button></template>`);
+    expect(code).toContain("const { track } = props;");
+    expect(code).toContain("tracker.track(track)");
+    expect((ts.createSourceFile("/B.vue.ts", code, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS) as ts.SourceFile & { parseDiagnostics: readonly unknown[] }).parseDiagnostics).toHaveLength(0);
   });
 
   it("does not wrap when no prop is a usable name", () => {

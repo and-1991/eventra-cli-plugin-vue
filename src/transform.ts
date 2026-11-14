@@ -1,8 +1,31 @@
 import { buildScriptModule, parseVueSfc, scriptVirtualPath } from "./parse-vue-sfc";
 import type { CliPluginTransformInput, CliPluginTransformResult } from "./types";
 
-// a template in another language is not HTML markup, so its events cannot be read
-const NON_HTML_TEMPLATE = /<template\b[^>]*\blang\s*=\s*["']?(pug|jade|haml|slm)\b/i;
+const TEMPLATE_TAG = /<template\b/gi;
+const NON_HTML_LANG = /\blang\s*=\s*["']?(pug|jade|haml|slm)\b/gi;
+
+/**
+ * The language of a template in another language than HTML (`<template lang="pug">`), whose events cannot be read:
+ * what `/<template\b[^>]*\blang\s*=\s*["']?(pug|jade|haml|slm)\b/i` finds, without its cost. That pattern scanned
+ * to the next `>` again from every `<template`, and a file with many of them and no `>` took minutes. Every
+ * `<template` before the same `>` sees the same attributes or fewer, so only the first one is looked at, and each
+ * part of the text is read once.
+ */
+export function nonHtmlTemplateLanguage(source: string): string | undefined {
+  TEMPLATE_TAG.lastIndex = 0;
+  for (let tag = TEMPLATE_TAG.exec(source); tag; tag = TEMPLATE_TAG.exec(source)) {
+    const start = TEMPLATE_TAG.lastIndex;
+    const close = source.indexOf(">", start);
+    const end = close === -1 ? source.length : close;
+    // the pattern took the last `lang=` before the `>`
+    let language: string | undefined;
+    for (const match of source.slice(start, end).matchAll(NON_HTML_LANG)) language = match[1];
+    if (language) return language.toLowerCase();
+    if (close === -1) return undefined;
+    TEMPLATE_TAG.lastIndex = close + 1;
+  }
+  return undefined;
+}
 
 const EMPTY_SFC_ERROR = /^At least one <template> or <script> is required/;
 
@@ -26,7 +49,7 @@ export async function transformVueSfc(
     );
   }
 
-  const language = NON_HTML_TEMPLATE.exec(input.source)?.[1]?.toLowerCase();
+  const language = nonHtmlTemplateLanguage(input.source);
   const notes = language ? [`<template lang="${language}"> is not read: events written in it are not in the scan (script events are).`] : [];
   // a linked file that is not there is not an error (it may be generated), but nothing of it is in the scan
   for (const src of parsed.missingSrc) notes.push(`"${src}" was not found: what it holds is not in the scan.`);

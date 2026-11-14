@@ -22,6 +22,19 @@ export interface ComponentModule {
 
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
 
+// Words that cannot name a variable in a module (which is strict, and may hold `await`): a prop called `class`,
+// `for`, `default` or `new` is still a prop, but `const { class } = props` would not parse. A template cannot name
+// such a prop bare either (`{{ class }}` is not an expression), so it is simply not made a local.
+const RESERVED = new Set([
+  "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do", "else", "enum", "export",
+  "extends", "false", "finally", "for", "function", "if", "import", "in", "instanceof", "new", "null", "return", "super",
+  "switch", "this", "throw", "true", "try", "typeof", "var", "void", "while", "with", "yield", "let", "static",
+  "implements", "interface", "package", "private", "protected", "public", "await", "arguments", "eval",
+]);
+
+/** A prop name that can also be a local of the same name. */
+const bindable = (name: string): boolean => IDENTIFIER.test(name) && !RESERVED.has(name);
+
 /** Everything a script block declares at its top level, which the template can name. */
 export interface ScriptBindings {
   /** Local names of default imports (`import Button from "./Button.vue"`): the components a template can use. */
@@ -201,7 +214,7 @@ export function wrapScriptSetup(block: VueScriptBlock, componentName: string, de
   if (id?.type === "Identifier") {
     parameter = id.name;
     // the template names props bare, so each one is also a local that reads the same parameter path
-    const bare = names.filter((name) => IDENTIFIER.test(name) && !declaredElsewhere.has(name) && name !== id!.name);
+    const bare = names.filter((name) => bindable(name) && !declaredElsewhere.has(name) && name !== id!.name);
     if (bare.length > 0) aliases = ` const { ${bare.join(", ")} } = ${parameter};`;
   } else if (id?.type === "ObjectPattern") {
     // a rest element has to stay last, so nothing can be added after it
@@ -212,11 +225,11 @@ export function wrapScriptSetup(block: VueScriptBlock, componentName: string, de
       if (key.type === "Identifier") present.add(key.name);
       else if (key.type === "StringLiteral") present.add(key.value);
     }
-    const missing = names.filter((name) => IDENTIFIER.test(name) && !present.has(name) && !declaredElsewhere.has(name));
+    const missing = names.filter((name) => bindable(name) && !present.has(name) && !declaredElsewhere.has(name));
     const text = block.content.slice(id.start, id.typeAnnotation ? id.typeAnnotation.start : id.end).trim();
     parameter = missing.length > 0 ? text.replace(/\s*\}$/, `${id.properties.length > 0 ? "," : ""} ${missing.join(", ")} }`) : text;
   } else if (id === null) {
-    const bare = names.filter((name) => IDENTIFIER.test(name) && !declaredElsewhere.has(name));
+    const bare = names.filter((name) => bindable(name) && !declaredElsewhere.has(name));
     if (bare.length === 0) return null;
     parameter = `{ ${bare.join(", ")} }`;
   } else {

@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@eventra_dev/cli-plugin-vue"><img alt="npm version" src="https://img.shields.io/npm/v/@eventra_dev/cli-plugin-vue.svg?style=flat-square&color=blue"></a>
   <a href="https://www.npmjs.com/package/@eventra_dev/cli-plugin-vue"><img alt="npm downloads" src="https://img.shields.io/npm/dm/@eventra_dev/cli-plugin-vue.svg?style=flat-square&color=blue"></a>
-  <img alt="tests passing" src="https://img.shields.io/badge/tests-157%20passing-brightgreen?style=flat-square&logo=vitest&logoColor=white">
+  <img alt="tests passing" src="https://img.shields.io/badge/tests-165%20passing-brightgreen?style=flat-square&logo=vitest&logoColor=white">
   <img alt="coverage" src="https://img.shields.io/badge/coverage-100%25-brightgreen?style=flat-square&logo=vitest&logoColor=white">
   <img alt="node" src="https://img.shields.io/node/v/@eventra_dev/cli-plugin-vue?style=flat-square&color=darkgreen&logo=node.js&logoColor=white">
   <a href="https://www.typescriptlang.org/"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-ready-blue?style=flat-square&logo=typescript&logoColor=white"></a>
@@ -20,7 +20,7 @@ Official [**Eventra CLI**](https://www.npmjs.com/package/@eventra_dev/eventra-cl
 
 ## Overview
 
-The CLI core is framework-agnostic and only walks `.ts`/`.tsx`/`.js`/`.jsx`. This plugin teaches it `.vue`: it parses each SFC with the real Vue compiler ([`@vue/compiler-sfc`](https://www.npmjs.com/package/@vue/compiler-sfc)) — not a regex — and hands the CLI a single virtual TypeScript module per file, so every existing detection rule (direct SDK calls, function wrappers, cross-file propagation, dynamic-name reporting) applies to Vue code without any Vue-specific case in the core engine.
+The CLI core is framework-agnostic and only walks TypeScript and JavaScript files (`.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`). This plugin teaches it `.vue`: it parses each SFC with the real Vue compiler ([`@vue/compiler-sfc`](https://www.npmjs.com/package/@vue/compiler-sfc)) - not a regex - and hands the CLI a single virtual TypeScript module per file, so every existing detection rule (direct SDK calls, function wrappers, cross-file propagation, dynamic-name reporting) applies to Vue code without any Vue-specific case in the core engine.
 
 Vue and Nuxt `.vue` files are handled the same way — Nuxt pages/layouts/components are ordinary Vue SFCs. See [Nuxt](#nuxt) below for auto-import composables.
 
@@ -103,7 +103,7 @@ Tracking calls written in the template itself are read, not only `event` attribu
 </template>
 ```
 
-Read: `@click` / `v-on` handlers (one or several statements, multi-line arrow functions), `{{ }}` interpolations the source of `v-for` (`item in items()`), dynamic arguments (`:[name()]`, `@[event()]`) and the expressions of `v-bind`, `v-if`, `v-else-if`, `v-show`, `v-model`, `v-html` and `v-text`. They are placed in the same module as the script, so a function imported or defined there resolves normally; an argument that comes from a `v-for` variable is reported as a dynamic occurrence. The loop variables of `v-for` and `v-slot` parameters are not code and are skipped; the value of a custom directive (`v-focus="x"`) is left alone.
+Read: `@click` / `v-on` handlers (one or several statements, multi-line arrow functions), `{{ }}` interpolations, the source of `v-for` (`item in items()`), dynamic arguments (`:[name()]`, `@[event()]`) and the expressions of `v-bind`, `v-if`, `v-else-if`, `v-show`, `v-model`, `v-html` and `v-text`. They are placed in the same module as the script, so a function imported or defined there resolves normally; an argument that comes from a `v-for` variable is reported as a dynamic occurrence. The loop variables of `v-for` and `v-slot` parameters are not code and are skipped; the value of a custom directive (`v-focus="x"`) is left alone.
 
 ### Props of a component, whatever they are called
 
@@ -126,7 +126,7 @@ import Button from './Button.vue'
 <template><Button analytics-name="checkout.cta">Pay</Button></template>
 ```
 
-`checkout.cta` is found. It works with `defineProps<{ ... }>()`, `defineProps([...])`, `defineProps({ ... })`, `withDefaults(...)`, a props object (`const props = defineProps(...)`) and a destructuring (`const { analyticsName } = defineProps(...)`), and also when the template reads the prop by its bare name (`@click="tracker.track(analyticsName)"`). A prop handed on to another component (`<Inner :name="props.analyticsName" />`) is followed. Props the component never tracks are not events. A prop that comes from a `v-for` variable is reported as a dynamic occurrence.
+`checkout.cta` is found. It works with `defineProps<{ ... }>()`, `defineProps([...])`, `defineProps({ ... })`, `withDefaults(...)`, a props object (`const props = defineProps(...)`) and a destructuring (`const { analyticsName } = defineProps(...)`), and also when the template reads the prop by its bare name (`@click="tracker.track(analyticsName)"`). A prop handed on to another component (`<Inner :name="props.analyticsName" />`) is followed. Props the component never tracks are not events. A prop that comes from a `v-for` variable is reported as a dynamic occurrence. A prop named by a reserved word (`class`, `for`, `default`, `new`) does not break the scan; it is read through the props object (`props.class`), as a template has to read it too.
 
 **Not followed** (those components are scanned as before, so nothing is lost, but a prop that only they use is not found):
 
@@ -175,6 +175,8 @@ export interface CliPluginVue {
   match(path: string): boolean;
   transform(input: { path: string; source: string }): Promise<{
     modules: Array<{ path: string; content: string }>;
+    notes?: string[];      // e.g. a `<template lang="pug">` that is not read, a `src=` file that is not there
+    dependsOn?: string[];  // `<script src>` / `<template src>` files, so `watch` rescans the component
   }>;
 }
 ```
@@ -194,7 +196,7 @@ No dependency on `@eventra_dev/eventra-cli` - the CLI adapts this shape internal
 
 **100% statement/branch/function/line coverage** (v8 provider, `pnpm test:coverage`), enforced via a `coverage.thresholds` block in `vitest.config.ts`.
 
-**157 unit tests** (vitest), covering:
+**164 unit tests** (vitest), covering:
 
 | Area | Covers |
 |---|---|

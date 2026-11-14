@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { transformVueSfc } from "../src/transform";
+import { nonHtmlTemplateLanguage, transformVueSfc } from "../src/transform";
 
 const run = (source: string) => transformVueSfc({ path: "/p/A.vue", source });
 
@@ -15,6 +15,59 @@ describe("a template in another language", () => {
     expect((await run(`<template><button event="x">go</button></template>`)).notes).toBeUndefined();
     expect((await run(`<template lang="html"><button event="x">go</button></template>`)).notes).toBeUndefined();
   });
+});
+
+describe("finding the language of a template", () => {
+  // what the language was found with before; the scan must find exactly the same
+  const PATTERN = /<template\b[^>]*\blang\s*=\s*["']?(pug|jade|haml|slm)\b/i;
+
+  it("finds what the pattern finds, the last lang= before the >, and nothing after it", () => {
+    const cases = [
+      `<template lang="pug">`,
+      `<TEMPLATE LANG = 'Jade'>`,
+      `<template lang=haml>`,
+      `<template class="a" lang="slm" >`,
+      `<template lang="pug" lang="haml">`,
+      `<template lang="html">x</template><template lang="pug">`,
+      `<template> lang="pug"`,
+      `<templates lang="pug">`,
+      `<template xlang="pug">`,
+      `<template lang="pugx">`,
+      `<template <template lang="pug">`,
+      `<template lang="html"`,
+      `<template`,
+      `x`,
+      `<template lang="slm"`,
+    ];
+    for (const source of cases) expect(nonHtmlTemplateLanguage(source)).toBe(PATTERN.exec(source)?.[1]?.toLowerCase());
+    expect(nonHtmlTemplateLanguage(`<template lang="pug" lang="haml">`)).toBe("haml");
+  });
+
+  it("finds the same as the pattern in many generated pieces of markup", () => {
+    const pieces = ["<template", "<TEMPLATE", "<templates", " ", ">", "lang", "LANG", "=", " = ", "'", '"', "pug", "Jade", "haml", "slm", "pugx", "x", "\n"];
+    let seed = 7;
+    const next = (): number => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+    for (let i = 0; i < 20000; i++) {
+      let source = "";
+      for (let k = Math.floor(next() * 12); k > 0; k--) source += pieces[Math.floor(next() * pieces.length)];
+      expect(nonHtmlTemplateLanguage(source)).toBe(PATTERN.exec(source)?.[1]?.toLowerCase());
+    }
+  });
+
+  // the pattern took over a minute on this megabyte; the scan takes a few milliseconds
+  it("looks through a file with a hundred thousand <template and no > in well under a second", () => {
+    const many = "<template ".repeat(100_000);
+    const started = performance.now();
+    expect(nonHtmlTemplateLanguage(many)).toBeUndefined();
+    expect(nonHtmlTemplateLanguage(`${many}lang="pug"`)).toBe("pug");
+    expect(nonHtmlTemplateLanguage(`${"<template>".repeat(100_000)}`)).toBeUndefined();
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  it("transforms such a file without the minute the pattern took", async () => {
+    const result = await run(`<script>\nconst s = "${"<template ".repeat(100_000)}";\n</script>\n`);
+    expect(result.notes).toBeUndefined();
+  }, 15_000);
 });
 
 describe("files a component is built from", () => {
